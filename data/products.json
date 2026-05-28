@@ -414,5 +414,28 @@
       "تخفيض"
     ],
     "oldPrice": 300
+  },
+  {
+    "id": "1779937986577",
+    "name": "Gvk",
+    "category": "عطور",
+    "price": 5386,
+    "description": "Chciyciyxkxkhc hvihu do if you",
+    "colors": [],
+    "sizes": [
+      "50ml",
+      "100ml",
+      "250ml"
+    ],
+    "images": [
+      "/uploads/1779937968260-28fvu06a.jpg",
+      "/uploads/1779937969220-bmmkmuwd.jpg",
+      "/uploads/1779937971167-mc50sb0v.jpg",
+      "/uploads/1779937971613-uptnmq3m.jpg",
+      "/uploads/1779937972312-mfg3fub0.jpg"
+    ],
+    "tags": [
+      "جديد"
+    ]
   }
 ]

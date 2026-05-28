@@ -8,13 +8,22 @@ import fs from 'fs'
 import path from 'path'
 import { Product } from '@/types'
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'fallback-secret')
-const PRODUCTS_PATH = path.join(process.cwd(), 'data', 'products.json')
-const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads')
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || 'fallback-secret-change-this-immediately'
+)
 
-// Ensure uploads directory exists
+// ─── PATHS: Use Railway Volume if available, fallback to local ───
+const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data')
+const PRODUCTS_PATH = path.join(DATA_DIR, 'products.json')
+const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(process.cwd(), 'public', 'uploads')
+
+// Ensure upload directory exists
 if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true })
+  try {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true })
+  } catch (e) {
+    console.error('Failed to create uploads dir:', e)
+  }
 }
 
 // ─── AUTH ───
@@ -24,7 +33,7 @@ export async function login(formData: FormData) {
   const adminPassword = process.env.ADMIN_PASSWORD
 
   if (!adminPassword) {
-    return { error: 'لم يتم إعداد كلمة المرور. تحقق من ملف .env.local' }
+    return { error: 'لم يتم إعداد كلمة المرور. تحقق من متغير ADMIN_PASSWORD' }
   }
 
   if (password !== adminPassword) {
@@ -39,7 +48,7 @@ export async function login(formData: FormData) {
   cookies().set('admin_session', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: 'lax',
     maxAge: 60 * 60 * 8,
     path: '/',
   })
@@ -52,47 +61,76 @@ export async function logout() {
   redirect('/admin/login')
 }
 
+// ─── ADMIN GUARD ───
+
+async function verifyAdmin() {
+  const token = cookies().get('admin_session')?.value
+  if (!token) throw new Error('Unauthorized')
+
+  try {
+    await jwtVerify(token, JWT_SECRET)
+  } catch {
+    cookies().delete('admin_session')
+    throw new Error('Session expired')
+  }
+}
+
 // ─── FILE UPLOAD ───
 
 export async function uploadImage(formData: FormData) {
+  await verifyAdmin()
+
   const file = formData.get('image') as File
   if (!file) return { error: 'لم يتم اختيار ملف' }
 
-  // Validate file type
   const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg']
   if (!allowedTypes.includes(file.type)) {
     return { error: 'نوع الملف غير مدعوم. استخدم JPG, PNG, أو WebP' }
   }
 
-  // Validate file size (5MB max)
   const maxSize = 5 * 1024 * 1024
   if (file.size > maxSize) {
     return { error: 'حجم الملف كبير جداً. الحد الأقصى 5 ميجابايت' }
   }
 
-  // Generate unique filename
   const ext = file.name.split('.').pop() || 'jpg'
   const filename = `${Date.now()}-${Math.random().toString(36).substring(2, 10)}.${ext}`
   const filepath = path.join(UPLOADS_DIR, filename)
 
-  // Save file
-  const bytes = await file.arrayBuffer()
-  fs.writeFileSync(filepath, Buffer.from(bytes))
-
-  // Return public URL
-  const publicUrl = `/uploads/${filename}`
-  return { success: true, url: publicUrl }
+  try {
+    const bytes = await file.arrayBuffer()
+    fs.writeFileSync(filepath, Buffer.from(bytes))
+    return { success: true, url: `/uploads/${filename}` }
+  } catch (e) {
+    console.error('Upload failed:', e)
+    return { error: 'فشل رفع الصورة' }
+  }
 }
 
 // ─── PRODUCTS CRUD ───
 
 function readProducts(): Product[] {
-  const data = fs.readFileSync(PRODUCTS_PATH, 'utf-8')
-  return JSON.parse(data)
+  try {
+    const data = fs.readFileSync(PRODUCTS_PATH, 'utf-8')
+    return JSON.parse(data)
+  } catch (e) {
+    // Fresh volume: file doesn't exist yet. Return empty array.
+    console.log('products.json not found on volume, returning empty array')
+    return []
+  }
 }
 
 function writeProducts(products: Product[]) {
-  fs.writeFileSync(PRODUCTS_PATH, JSON.stringify(products, null, 2), 'utf-8')
+  try {
+    const dir = path.dirname(PRODUCTS_PATH)
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
+    fs.writeFileSync(PRODUCTS_PATH, JSON.stringify(products, null, 2), 'utf-8')
+  } catch (e) {
+    console.error('Failed to write products:', e)
+    throw new Error('Failed to save product data')
+  }
 }
 
 export async function getAllProducts(): Promise<Product[]> {
@@ -101,10 +139,15 @@ export async function getAllProducts(): Promise<Product[]> {
 
 function parseArrayField(value: string | null): string[] {
   if (!value) return []
-  return value.split(',').map((s) => s.trim()).filter(Boolean)
+  return value
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
 }
 
 export async function addProduct(formData: FormData) {
+  await verifyAdmin()
+
   const products = readProducts()
 
   const newProduct: Product = {
@@ -122,6 +165,7 @@ export async function addProduct(formData: FormData) {
 
   products.push(newProduct)
   writeProducts(products)
+
   revalidatePath('/')
   revalidatePath('/clothes')
   revalidatePath('/perfumes')
@@ -133,6 +177,8 @@ export async function addProduct(formData: FormData) {
 }
 
 export async function updateProduct(id: string, formData: FormData) {
+  await verifyAdmin()
+
   const products = readProducts()
   const index = products.findIndex((p) => p.id === id)
 
@@ -154,6 +200,7 @@ export async function updateProduct(id: string, formData: FormData) {
   }
 
   writeProducts(products)
+
   revalidatePath('/')
   revalidatePath('/clothes')
   revalidatePath('/perfumes')
@@ -166,6 +213,8 @@ export async function updateProduct(id: string, formData: FormData) {
 }
 
 export async function deleteProduct(id: string) {
+  await verifyAdmin()
+
   const products = readProducts()
   const filtered = products.filter((p) => p.id !== id)
 
@@ -174,6 +223,7 @@ export async function deleteProduct(id: string) {
   }
 
   writeProducts(filtered)
+
   revalidatePath('/')
   revalidatePath('/clothes')
   revalidatePath('/perfumes')
@@ -184,9 +234,9 @@ export async function deleteProduct(id: string) {
   return { success: true }
 }
 
-// ─── DISCOUNT: enter NEW (discounted) price ───
-
 export async function addDiscount(id: string, newPrice: number) {
+  await verifyAdmin()
+
   const products = readProducts()
   const index = products.findIndex((p) => p.id === id)
 
@@ -208,6 +258,7 @@ export async function addDiscount(id: string, newPrice: number) {
   }
 
   writeProducts(products)
+
   revalidatePath('/')
   revalidatePath('/offers')
   revalidatePath('/admin')
@@ -217,6 +268,8 @@ export async function addDiscount(id: string, newPrice: number) {
 }
 
 export async function removeDiscount(id: string) {
+  await verifyAdmin()
+
   const products = readProducts()
   const index = products.findIndex((p) => p.id === id)
 
@@ -231,6 +284,7 @@ export async function removeDiscount(id: string) {
   products[index].tags = products[index].tags.filter((t) => t !== 'تخفيض')
 
   writeProducts(products)
+
   revalidatePath('/')
   revalidatePath('/offers')
   revalidatePath('/admin')
@@ -240,6 +294,8 @@ export async function removeDiscount(id: string) {
 }
 
 export async function toggleNewTag(id: string) {
+  await verifyAdmin()
+
   const products = readProducts()
   const index = products.findIndex((p) => p.id === id)
 
@@ -255,6 +311,7 @@ export async function toggleNewTag(id: string) {
   }
 
   writeProducts(products)
+
   revalidatePath('/')
   revalidatePath('/offers')
   revalidatePath('/admin')

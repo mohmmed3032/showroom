@@ -1,16 +1,31 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { ArrowLeft, Sparkles } from 'lucide-react'
 
 export default function HeroBanner() {
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const isMobileWidth = typeof window !== 'undefined' && window.innerWidth < 600
+    setIsMobile(isMobileWidth)
+
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 600)
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   return (
     <section className="relative min-h-[90vh] flex items-center overflow-hidden">
       {/* Background Image */}
       <div className="absolute inset-0 z-0">
         <Image
-          src="https://images.unsplash.com/photo-1445205170230-053b83016050?w=1920&h=1080&fit=crop"
+          src={isMobile ? `https://i.ibb.co/CpB3J6m8/Chat-GPT-Image-May-28-2026-05-29-06-AM.png` : `https://i.ibb.co/CpB3J6m8/Chat-GPT-Image-May-28-2026-05-29-06-AM.png`}
           alt="خلفية صالة العرض"
           fill
           className="object-cover"
