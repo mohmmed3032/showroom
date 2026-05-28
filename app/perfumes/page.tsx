@@ -1,0 +1,59 @@
+'use client'
+
+import { useState, useMemo } from 'react'
+import SectionTitle from '@/components/SectionTitle'
+import ProductGrid from '@/components/ProductGrid'
+import FilterBar from '@/components/FilterBar'
+import SearchBar from '@/components/SearchBar'
+import { getProductsByCategory, filterProducts } from '@/lib/products'
+
+export default function PerfumesPage() {
+  const [selectedCategory, setSelectedCategory] = useState('عطور')
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([])
+  const [selectedColors, setSelectedColors] = useState<string[]>([])
+  const [selectedTag, setSelectedTag] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+
+  const allPerfumes = getProductsByCategory('عطور')
+
+  const filteredProducts = useMemo(() => {
+    return filterProducts(
+      selectedCategory,
+      selectedSizes,
+      selectedColors,
+      selectedTag,
+      searchQuery
+    ).filter((p) => p.category === 'عطور')
+  }, [selectedCategory, selectedSizes, selectedColors, selectedTag, searchQuery])
+
+  const allSizes = Array.from(new Set(allPerfumes.flatMap((p) => p.sizes)))
+  const allColors = Array.from(new Set(allPerfumes.flatMap((p) => p.colors)))
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      <SectionTitle title="عطور" subtitle="روائح لا تُنسى" />
+
+      <SearchBar onSearch={setSearchQuery} initialQuery={searchQuery} />
+
+      <FilterBar
+        categories={['الكل', 'عطور']}
+        sizes={allSizes}
+        colors={allColors}
+        selectedCategory={selectedCategory}
+        selectedSizes={selectedSizes}
+        selectedColors={selectedColors}
+        selectedTag={selectedTag}
+        onCategoryChange={setSelectedCategory}
+        onSizesChange={setSelectedSizes}
+        onColorsChange={setSelectedColors}
+        onTagChange={setSelectedTag}
+      />
+
+      <p className="text-sm text-warm-gray mb-4">
+        {filteredProducts.length} منتج
+      </p>
+
+      <ProductGrid products={filteredProducts} emptyMessage="لا توجد عطور تطابق الفلاتر المحددة" />
+    </div>
+  )
+}
