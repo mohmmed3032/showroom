@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import SectionTitle from '@/components/SectionTitle'
 import ProductGrid from '@/components/ProductGrid'
 import FilterBar from '@/components/FilterBar'
 import SearchBar from '@/components/SearchBar'
 import { getProductsByCategory, filterProducts } from '@/lib/products'
+import { getPublicProducts } from '../admin/actions';
 
 export default function ShoesPage() {
   const [selectedCategory, setSelectedCategory] = useState('أحذية')
@@ -14,7 +15,10 @@ export default function ShoesPage() {
   const [selectedTag, setSelectedTag] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
 
-  const allShoes = getProductsByCategory('أحذية')
+  const [allShoes, setAllShoes] = useState<any[]>([])
+  useEffect(() => {
+    getPublicProducts().then(p => setAllShoes(p.filter(x => x.category === 'أحذية')))
+  }, [])
 
   const filteredProducts = useMemo(() => {
     return filterProducts(
